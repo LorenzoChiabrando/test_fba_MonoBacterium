@@ -1,0 +1,29 @@
+library(epimod)
+downloadContainers()
+model.generation(net_fname = "./net/BacPN.PNPRO", 
+                 transitions_fname = "./rate_functions/sharedMetabolite.cpp",
+                 fba_fname = "./model/Escherichia_coli_str_K_12_substr_MG1655.txt"
+                 )
+system("mkdir gen_phase")
+system("mv BacPN.def gen_phase")  
+system("mv BacPN.fbainfo gen_phase")  
+system("mv BacPN.net gen_phase")  
+system("mv BacPN.PlaceTransition gen_phase")  
+system("mv BacPN.solver gen_phase")  
+
+model.analysis(solver_fname = "./gen_phase/BacPN.solver",
+               parameters_fname = "./csv/initData.csv",
+               functions_fname =  "./functions/functions.R",
+               f_time = 10,
+               s_time = 1,
+               i_time = 0,
+							 fba_fname = "./model/Escherichia_coli_str_K_12_substr_MG1655.txt",
+               event_function = NULL,
+							 user_files = c("./csv/Bacteria_Parameters.csv", "./gen_phase/BacPN.fbainfo"),
+							 debug=TRUE
+)               
+    
+# Remove directory with results.
+system("rm ExitStatusFile")
+system("rm -r BacPN_analysis")
+system("rm -r gen_phase")
