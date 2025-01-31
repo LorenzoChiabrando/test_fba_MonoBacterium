@@ -71,19 +71,23 @@ extract_ex_reactions <- function(
 #                   is in 'fba_reactions'. We only keep the "_r" 
 #                   version, using 'fba_upper_bound'.
 #      - nonFBA CSV: includes other reactions (not in 'fba_reactions'),
-#                    with bounds = 'non_fba_base_bound / population'.
+#                    with bounds = 'not_shared_base_bound / population'.
 #    Reactions containing "EX_biomass_e" are skipped entirely.
 # ------------------------------------------------------------------
 process_ex_reactions <- function(
-  reaction_file,       # A single file containing EX_ reactions (one per line)
-  bacteria_files,      # Vector of file paths representing the bacterial models (for N bacteria)
+  reaction_file,
+  bacteria_files,
   output_dir           = getwd(),
   fba_reactions        = character(),
-  bacteria_counts      = c(1),      # Numeric vector of length N (same length as bacteria_files)
-  non_fba_base_bound   = 1000,      # Either single numeric or vector of length N
-  fba_upper_bound      = 0.015      # Either single numeric or vector of length N
+  bacteria_counts      = c(1),
+  not_shared_base_bound   = 1000,
+  fba_upper_bound      = 0.015,
+  reaction_versions    = c("both", "r", "f") # 1) nuovo parametro
 ) {
-  # 1) Basic checks
+  # 2) Forza uno dei 3 valori
+  reaction_versions <- match.arg(reaction_versions)
+
+  # (resto invariato)  
   n_bact <- length(bacteria_files)
   if (n_bact < 1) {
     stop("You must provide at least one bacterial model in 'bacteria_files'.")
@@ -94,93 +98,92 @@ process_ex_reactions <- function(
   if (length(bacteria_counts) != n_bact) {
     stop("Length of 'bacteria_counts' must match length of 'bacteria_files'.")
   }
-  if (length(non_fba_base_bound) != 1 && length(non_fba_base_bound) != n_bact) {
-    stop("'non_fba_base_bound' must be either a single numeric or a vector of length = number of bacteria.")
+  if (length(not_shared_base_bound) != 1 && length(not_shared_base_bound) != n_bact) {
+    stop("'not_shared_base_bound' must be either a single numeric or a vector of length = number of bacteria.")
   }
   if (length(fba_upper_bound) != 1 && length(fba_upper_bound) != n_bact) {
     stop("'fba_upper_bound' must be either a single numeric or a vector of length = number of bacteria.")
   }
-  
-  # 2) Create output directory if needed
+
   if (!dir.exists(output_dir)) {
     dir.create(output_dir, recursive = TRUE)
   }
   
-  # 3) Prepare output files
   output_ub_fba_path    <- file.path(output_dir, "EX_upper_bounds_FBA.csv")
   output_ub_nonfba_path <- file.path(output_dir, "EX_upper_bounds_nonFBA.csv")
   
   f_fba    <- file(output_ub_fba_path, "w")
   f_nonfba <- file(output_ub_nonfba_path, "w")
   
-  # Helper function: retrieve the base name of a reaction (removing _r or _f)
+  # Validazione e "replicazione" del base bound per le non-FBA
+  if (length(not_shared_base_bound) == 1) {
+    base_values <- rep(not_shared_base_bound, n_bact)
+  } else {
+    base_values <- not_shared_base_bound
+  }
+
+  first_line <- paste(c("base_upper_bounds", base_values), collapse = ",")
+  writeLines(first_line, con = f_nonfba)
+  
   get_base_name <- function(rxn) {
     sub("(_r|_f)$", "", rxn)
   }
-  
-  # 4) Read all reactions from the single reaction_file
+
+  # Leggi tutte le reazioni
   reactions <- readLines(reaction_file, warn = FALSE)
   
-  # 5) Iterate through reactions
+  # Itera
   for (reaction in reactions) {
-    # Skip anything containing "EX_biomass_e"
+    # 1) Skip in base a reaction_versions
+    if (reaction_versions == "r" && grepl("_f$", reaction)) next
+    if (reaction_versions == "f" && grepl("_r$", reaction)) next
+
+    # 2) Skip eventuale se è "EX_biomass_e"
     if (grepl("EX_biomass_e", reaction)) {
       next
     }
     
-    # Identify the base reaction name (no _r or _f)
+    # 3) Determina la base (senza _r/_f)
     base_rxn <- get_base_name(reaction)
     
-    # Check if the reaction is in 'fba_reactions'
+    # 4) Se la base è in fba_reactions
     if (base_rxn %in% fba_reactions) {
-      # For FBA only, we record if the reaction ends with "_r"
+      # ... e finisce in _r, allora scrivi su FBA
       if (grepl("_r$", reaction)) {
-        # Build the vector of bounds for each bacterium
         ub_values <- numeric(n_bact)
-        
         for (i in seq_len(n_bact)) {
-          # If 'fba_upper_bound' is length 1, reuse that single value
-          # Otherwise, pick the i-th value
-          if (length(fba_upper_bound) == 1) {
-            ub_values[i] <- fba_upper_bound
+          ub_values[i] <- if (length(fba_upper_bound) == 1) {
+            fba_upper_bound
           } else {
-            ub_values[i] <- fba_upper_bound[i]
+            fba_upper_bound[i]
           }
         }
-        
-        # Write line to FBA CSV
         line_to_write <- paste(c(reaction, ub_values), collapse = ",")
         writeLines(line_to_write, con = f_fba)
       }
-      
     } else {
-      # For NON-FBA
-      # Build the vector of bounds as (non_fba_base_bound[i] / bacteria_counts[i]) for each i
+      # NON-FBA
       ub_values <- numeric(n_bact)
-      
       for (i in seq_len(n_bact)) {
-        # If 'non_fba_base_bound' is length 1, use that single value
-        # Otherwise, pick the i-th
-        if (length(non_fba_base_bound) == 1) {
-          ub_values[i] <- non_fba_base_bound / bacteria_counts[i]
+        ub_values[i] <- if (length(not_shared_base_bound) == 1) {
+          not_shared_base_bound / bacteria_counts[i]
         } else {
-          ub_values[i] <- non_fba_base_bound[i] / bacteria_counts[i]
+          not_shared_base_bound[i] / bacteria_counts[i]
         }
       }
-      
-      # Write line to nonFBA CSV
       line_to_write <- paste(c(reaction, ub_values), collapse = ",")
       writeLines(line_to_write, con = f_nonfba)
     }
   }
   
-  # 6) Close file connections
+  # Chiudi i file
   close(f_fba)
   close(f_nonfba)
   
   message("Processing completed.\n  FBA file:    ", output_ub_fba_path,
           "\n  nonFBA file: ", output_ub_nonfba_path)
 }
+
 
 
 
@@ -197,24 +200,24 @@ run_full_ex_bounds <- function(
   output_dir         = getwd(),
   fba_reactions      = character(),
   bacteria_counts    = c(1),
-  non_fba_base_bound = 1000,
-  fba_upper_bound    = 0.015
+  not_shared_base_bound = 1000,
+  fba_upper_bound    = 0.015,
+  reaction_versions  = c("both", "r", "f")  
 ) {
-  # Step 1: Extract EX_ reactions from the specified text files
   extract_ex_reactions(
     files       = bacteria_files,
     output_file = file.path(output_dir, extraction_output)
   )
   
-  # Step 2: Process the extracted reactions to create FBA and nonFBA CSVs
   process_ex_reactions(
     reaction_file      = file.path(output_dir, extraction_output),
     bacteria_files     = bacteria_files,
     output_dir         = output_dir,
     fba_reactions      = fba_reactions,
     bacteria_counts    = bacteria_counts,
-    non_fba_base_bound = non_fba_base_bound,
-    fba_upper_bound    = fba_upper_bound
+    not_shared_base_bound = not_shared_base_bound,
+    fba_upper_bound    = fba_upper_bound,
+    reaction_versions  = reaction_versions 
   )
 }
 
