@@ -1,0 +1,9 @@
+#PLACE  ID
+E_coli	0
+E_coli_biomass_e	1
+#TRANSITION  ID
+Starv	0
+Dup	1
+Death	2
+E_coli_EX_biomass_e_out	3
+E_coli_EX_biomass_e_in	4

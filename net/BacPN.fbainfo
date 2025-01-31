@@ -1,0 +1,24 @@
+[
+  {
+    "Transition": "E_coli_EX_biomass_e_out",
+    "LPfile": "Escherichia_coli_str_K_12_substr_MG1655.txt",
+    "Reaction": "EX_biomass_e",
+    "Multiplicity": 1,
+    "BacteriaCountPlace": "E_coli",
+    "BacteriaBiomassPlace": "E_coli_biomass_e",
+    "InputPlaces": ["E_coli_biomass_e"],
+    "OutputPlaces": ["E_coli_biomass_e"],
+    "IsBiomass": true
+  },
+  {
+    "Transition": "E_coli_EX_biomass_e_in",
+    "LPfile": "Escherichia_coli_str_K_12_substr_MG1655.txt",
+    "Reaction": "EX_biomass_e",
+    "Multiplicity": 1,
+    "BacteriaCountPlace": "E_coli",
+    "BacteriaBiomassPlace": "E_coli_biomass_e",
+    "InputPlaces": ["E_coli_biomass_e"],
+    "OutputPlaces": [],
+    "IsBiomass": true
+  }
+]
