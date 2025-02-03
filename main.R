@@ -5,12 +5,12 @@ library(R.matlab)
 library(ggplot2)
 library(dplyr)
 library(tidyr)
-library(epimod)
 library(patchwork)
 library(ggplot2)
 library(scales)
 # remove.packages("epimod")
 # install_github("https://github.com/qBioTurin/epimod", ref="epimod_pFBA")
+library(epimod)
 # downloadContainers()
 
 wd = getwd()
@@ -34,9 +34,6 @@ source(paste0(wd, "/functions/save_sensitivity_results.R"))
 
 # Define the models to be processed
 models <- list(list(name = mn_name, type = org_name))
-
-# Create a results directory if it does not already exist
-dir.create(paste0(wd, "/results", showWarnings = FALSE))
 
 # Define the output directory for results
 dest_dir <- paste0(wd, "/results/")
@@ -107,22 +104,20 @@ process_fba_models(working_dir = NULL, list(FBA_PARAMETERS$model_tags))
 
 # Define the FBA models and associated counts
 bacteria_models <- paste0(wd, "/results/", mn_name, ".txt")
-bacteria_counts <- 1 # (cells)
+bacteria_counts <- 1000 # (cells)
 
 molar = 0.001 # mmol/mL (1 mM)
 V = 0.001 # mL (1 microL)
 C = molar*V # mmol
 biomass = 1e-12 # gWD
 
-new_bounds = C
-
 run_full_ex_bounds(
-  extraction_output  = "extracted_ex_reactions.txt", # Output file for extracted reactions
-  bacteria_files     = bacteria_models,              # List of FBA models to process
-  output_dir         = "results_ex_reactions",       # Directory to store results
+  extraction_output  = "extracted_ex_reactions.txt",
+  bacteria_files     = bacteria_models,
+  output_dir         = "results_ex_reactions",
   bacteria_counts    = (bacteria_counts*biomass),
-  non_fba_base_bound = C,
-  reaction_version   = "r" # "r", "f" and "both" (default)
+  not_shared_base_bound = C,
+  reaction_version   = "r"
 )
 
 Bacteria_Parameters <- read.csv(paste0(wd, "/input/Bacteria_Parameters.csv"), head = F)
@@ -155,11 +150,24 @@ insert_position <- which(cpp_content == "")[1]
 cpp_content <- c(
   cpp_content[1:17],
   new_variables,
-  cpp_content[(20):length(cpp_content)]
+  cpp_content[20:length(cpp_content)]
 )
 
 # Write the modified content back to the file
 writeLines(cpp_content, cpp_file_path)
+
+R_funct_file_path <- paste0(wd, "/functions/functions.R")
+R_funct_content <- readLines(R_funct_file_path)
+
+# Insert the new variables after the includes
+R_funct_content <- c(
+  R_funct_content[1:6],
+  paste0("  y_ini <- c(", bacteria_counts, ", ", biomass*1e+12, ")"),
+  R_funct_content[8:length(R_funct_content)]
+)
+
+# Write the modified content back to the file
+writeLines(R_funct_content, R_funct_file_path)
 
 model.generation(net_fname = paste0(wd, "/net/", model_name, ".PNPRO"),
                  transitions_fname = paste0(wd, "/input/General_functions.cpp"),
@@ -173,10 +181,14 @@ system(paste0("mv ",
               model_name, ".solver ", wd, "/net/"))
 
 model.analysis(solver_fname = paste0(wd, "/net/", model_name, ".solver"),
-               i_time = 0, f_time = 48, s_time = 0.5,
                parameters_fname = paste0(wd, "/input/initData.csv"),
                functions_fname = paste0(wd, "/functions/functions.R"),
                debug = T,
+               f_time = 48,
+               s_time = 0.5,
+               i_time = 0,
+               rchn = 1e-06,
+               event_function = NULL,
                fba_fname = paste0(wd, "/results/", mn_name, ".txt"),
                user_files = c(paste0(wd, "/input/Bacteria_Parameters.csv"),
                               paste0(wd, "/net/", model_name, ".fbainfo"),
@@ -184,8 +196,8 @@ model.analysis(solver_fname = paste0(wd, "/net/", model_name, ".solver"),
                               paste0(wd, "/results_ex_reactions/EX_upper_bounds_nonFBA.csv")))
 
 p = plot_analysis()
-# First ensure your combined plot is stored in a variable
-p[[1]] + p[[2]] + (p[[3]] / p[[4]] / p[[5]])
+
+ggsave(paste0(model_name, "_",  "Analysis_results.pdf"), p[[1]] + p[[2]] + (p[[3]] / p[[4]] / p[[5]]), width = 15, height = 8)
 
 Bacteria_Parameters <- read.csv(paste0(wd, "/input/Bacteria_Parameters.csv"), head = F)
 
@@ -238,7 +250,7 @@ plots <- results$plots
 
 (plots[[1]] + plots[[2]]) / (plots[[3]] + plots[[4]]) / (plots[[5]] + plots[[6]]) 
 
-# file.remove(list.files(path = wd, pattern = "\\.log$", full.names = TRUE))
-# file.remove(list.files(path = wd, pattern = "\\ID$", full.names = TRUE))
-# file.remove(list.files(path = wd, pattern = "\\StatusFile$", full.names = TRUE))
-# gc()
+file.remove(list.files(path = wd, pattern = "\\.log$", full.names = TRUE))
+file.remove(list.files(path = wd, pattern = "\\ID$", full.names = TRUE))
+file.remove(list.files(path = wd, pattern = "\\StatusFile$", full.names = TRUE))
+gc()
