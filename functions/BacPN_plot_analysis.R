@@ -8,8 +8,7 @@ plot_analysis <- function(wd = getwd(),
                           custom_colors = c("black", "#098962", "#6e2076", "#583725", "#FF7700"),
                           ncol_places = 1,
                           ncol_reactions = 2,
-                          base_size = 12,
-                          base_family = "Arial") {
+                          base_size = 12) {
   
   # Function to list all .log files in the current directory
   get_log_files <- function() {
@@ -153,11 +152,11 @@ plot_analysis <- function(wd = getwd(),
   }
   
   # Create a custom publication theme
-  custom_theme <- function(base_size = 12, base_family = "Arial") {
-    theme_minimal(base_size = base_size, base_family = base_family) %+replace%
+  custom_theme <- function(base_size = 12) {
+    theme_minimal(base_size = base_size) %+replace%
       theme(
         # Text elements
-        text = element_text(family = base_family, color = "black"),
+        text = element_text(color = "black"),
         plot.title = element_text(
           size = rel(1.3),
           face = "bold",
@@ -242,7 +241,7 @@ plot_analysis <- function(wd = getwd(),
     scale_colour_manual(values = col_starv) +
     scale_y_continuous() +
     scale_x_continuous() +
-    custom_theme(base_size = base_size, base_family = base_family)
+    custom_theme(base_size = base_size)
   
   p_dup <- ggplot(all_data[["duplication"]], aes(x = Time, y = DuplicationRate, color = File)) +
     geom_line(linewidth = 0.5) +
@@ -253,7 +252,7 @@ plot_analysis <- function(wd = getwd(),
     scale_colour_manual(values = col_dup) +
     scale_y_continuous() +
     scale_x_continuous() +
-    custom_theme(base_size = base_size, base_family = base_family)
+    custom_theme(base_size = base_size)
   
   p_death <- ggplot(all_data[["death"]], aes(x = Time, y = DeathRate, color = File)) +
     geom_line(linewidth = 0.5) +
@@ -264,7 +263,7 @@ plot_analysis <- function(wd = getwd(),
     scale_colour_manual(values = col_death) +
     scale_y_continuous() +
     scale_x_continuous() +
-    custom_theme(base_size = base_size, base_family = base_family)
+    custom_theme(base_size = base_size)
   
   # Process and enhance trace plot
   trace <- utils::read.table(trace_file, header = TRUE) %>%
@@ -276,7 +275,7 @@ plot_analysis <- function(wd = getwd(),
          x = "Time (h)",
          y = "Marking") +
     facet_wrap(~Places, ncol = ncol_places, scales = "free_y") +
-    custom_theme(base_size = base_size, base_family = base_family) +
+    custom_theme(base_size = base_size) +
     theme(strip.text = element_text(face = "bold"),
           panel.spacing = unit(1.5, "lines"))
   
@@ -292,7 +291,7 @@ plot_analysis <- function(wd = getwd(),
     labs(title = "Metabolic Fluxes", x = "Time (h)", y = "Flux (mmol/gDW*h)") +
     scale_colour_manual(values = col_flux) +
     facet_wrap(~Reaction, ncol = ncol_reactions, scales = "free_y") +
-    custom_theme(base_size = base_size, base_family = base_family) +
+    custom_theme(base_size = base_size) +
     theme(strip.text = element_text(face = "bold"),
           panel.spacing = unit(1.5, "lines"))
   
