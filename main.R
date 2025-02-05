@@ -116,14 +116,10 @@ cat("Time elapsed:", elapsed_time, "minutes\n")
 bacteria_models <- paste0(wd, "/results/", mn_name, ".txt")
 bacteria_counts <- 1000 # (cells)
 
-molar = 0.001 # mmol/mL (1 mM)
+molar = 10 # mmol/mL (1000 mM)
 V = 0.001 # mL (1 microL)
 C = molar*V # mmol
 biomass = 1 # pgWD
-
-reactions_of_interest = c("EX_biomass_e_f", "EX_biomass_e_r",
-                          "EX_glc_D_e_r", "EX_glc_D_e_f",
-                          "EX_lcts_e_r", "EX_lcts_e_f")
 
 run_full_ex_bounds(
   extraction_output  = "extracted_ex_reactions.txt",
@@ -238,7 +234,7 @@ model.analysis(solver_fname = paste0(wd, "/net/", model_name, ".solver"),
                parameters_fname = paste0(wd, "/input/initData.csv"),
                functions_fname = paste0(wd, "/functions/functions.R"),
                debug = T,
-               f_time = 48,
+               f_time = 36,
                s_time = 0.5,
                i_time = 0,
                rchn = 1e-06,
@@ -255,11 +251,23 @@ elapsed_time <- end_time - start_time
 units(elapsed_time) <- "mins"
 cat("Time elapsed:", elapsed_time, "minutes\n")
 
-p = plot_analysis()
+p = plot_analysis(reactions_of_interest = 
+                    c("EX_biomass_e_f", "EX_biomass_e_r",
+                      "EX_glc_D_e_r", "EX_glc_D_e_f",
+                      "EX_lcts_e_r", "EX_lcts_e_f",
+                      "EX_but_e_r", "EX_but_e_f",
+                      "EX_ppa_e_r", "EX_ppa_e_f",
+                      "EX_ac_e_r", "EX_ac_e_f"), ncol_reactions = 3,
+                  place2plot = c(abbr, paste0(abbr, "_biomass_e")), ncol_places = 1)
 
 ggsave(paste0(model_name, "_",  "Analysis_results.pdf"), 
        p[[1]] + p[[2]] + (p[[3]] / p[[4]] / p[[5]]), 
-       width = 15, height = 8)
+       width = 21, height = 9)
+
+file.remove(list.files(path = wd, pattern = "\\.log$", full.names = TRUE))
+file.remove(list.files(path = wd, pattern = "\\ID$", full.names = TRUE))
+file.remove(list.files(path = wd, pattern = "\\StatusFile$", full.names = TRUE))
+gc()
 
 Bacteria_Parameters <- read.csv(paste0(wd, "/input/Bacteria_Parameters.csv"), head = F)
 
@@ -277,8 +285,13 @@ write.table(init_data,
 
 model.sensitivity(solver_fname = paste0(wd, "/net/", model_name, ".solver"),
                   fba_fname = paste0(wd, "/results/", mn_name, ".txt"),
-                  i_time = 0, f_time = 72, s_time = 0.5, 
-                  n_config = 250, debug = T,
+                  i_time = 0, 
+                  f_time = 72, 
+                  s_time = 0.5,
+                  n_config = 250, 
+                  debug = T,
+                  rchn = 1e-06,
+                  event_function = NULL,
                   target_value = c(abbr, paste0(abbr, "_biomass_e")),
                   parameters_fname = paste0(wd, "/input/initDataSensitivity.csv"),
                   parallel_processors = parallel::detectCores(),
