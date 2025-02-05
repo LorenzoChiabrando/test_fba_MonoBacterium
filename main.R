@@ -20,6 +20,7 @@ source(paste0(wd, "/epimod_FBAfunctions/R/FBAgreatmodeClass.R"))    # Core FBA c
 source(paste0(wd, "/epimod_FBAfunctions/R/class_generation.R"))     # Functions for generating FBA models
 source(paste0(wd, "/epimod_FBAfunctions/R/readMat.R"))              # MATLAB file reading utilities
 source(paste0(wd, "/epimod_FBAfunctions/R/ex_bounds_module.R"))
+source(paste0(wd, "/epimod_FBAfunctions/inst/diets/Script4Diets.R"))
 source(paste0(wd, "/functions/compiling_mn.R"))
 
 model_name = "BacPN"
@@ -37,6 +38,9 @@ models <- list(list(name = mn_name, type = org_name))
 
 # Define the output directory for results
 dest_dir <- paste0(wd, "/results/")
+
+# Start timing
+start_time <- Sys.time()
 
 # Loop through each model for FBA processing
 for (model_info in models) {
@@ -72,22 +76,28 @@ for (model_info in models) {
   } else {
     cat("No .rds files found for", fba_name, "\n")
   }
-
 }
 
-### Setting Upper Bounds for FBA reactions and Not FBA reactions ###
+# End timing
+end_time <- Sys.time()
 
-# To compile metabolic model
-#
-# FBA Model Processing Functions
-# 
-# This script contains functions for processing FBA  models.
-# It includes functionality for model generation, parameter setting, and file handling.
+# Force to minutes
+elapsed_time <- end_time - start_time
+units(elapsed_time) <- "mins"
+cat("Time elapsed:", elapsed_time, "minutes\n")
 
 FBA_PARAMETERS <- list(biomass = list(max = 1.172, mean = 0.489, min = 0.083),
                        model_tags = list(name = mn_name, type = org_name))
 
+start_time <- Sys.time()
+
 process_fba_models(working_dir = NULL, list(FBA_PARAMETERS$model_tags))
+
+end_time <- Sys.time()
+
+elapsed_time <- end_time - start_time
+units(elapsed_time) <- "mins"
+cat("Time elapsed:", elapsed_time, "minutes\n")
 
 # This function extracts all the specified EX_ reactions from the provided models (bacteria_files)
 # and calculates their lower bound as (bacteria_counts*biomass)/MW.
@@ -109,16 +119,51 @@ bacteria_counts <- 1000 # (cells)
 molar = 0.001 # mmol/mL (1 mM)
 V = 0.001 # mL (1 microL)
 C = molar*V # mmol
-biomass = 1e-12 # gWD
+biomass = 1 # pgWD
+
+reactions_of_interest = c("EX_biomass_e_f", "EX_biomass_e_r",
+                          "EX_glc_D_e_r", "EX_glc_D_e_f",
+                          "EX_lcts_e_r", "EX_lcts_e_f")
 
 run_full_ex_bounds(
   extraction_output  = "extracted_ex_reactions.txt",
   bacteria_files     = bacteria_models,
   output_dir         = "results_ex_reactions",
-  bacteria_counts    = (bacteria_counts*biomass),
+  bacteria_counts    = bacteria_counts*biomass,
   not_shared_base_bound = C,
   reaction_version   = "r"
 )
+
+bounds_file_path = paste0(wd, "/results_ex_reactions/EX_upper_bounds_nonFBA.csv")
+irr_exchange_bounds = read.csv(bounds_file_path, head = T)
+
+diet_medium = process_medium_data(media_wd = paste0(wd, "/epimod_FBAfunctions/inst/diets/vmh"),
+                                  medium_name = "EU_average",
+                                  bacteria_counts = bacteria_counts,
+                                  biomass = biomass)
+
+# Create a copy of the original dataframe
+result_df <- irr_exchange_bounds
+
+# Remove the "_r" suffix from base_upper_bounds for matching
+cleaned_bounds <- sub("_r$", "", irr_exchange_bounds$base_upper_bounds)
+
+# For each row in irr_exchange_bounds
+for( i in 1:nrow(irr_exchange_bounds) ) {
+  # Find matching exchange reaction in diet_medium
+  match_idx <- which(diet_medium$exchange_reaction == cleaned_bounds[i])
+  
+  # If there's a match, substitute the value
+  if(length(match_idx) > 0) {
+    result_df[[2]][i] <- diet_medium$Flux_in_mmol_human_day[match_idx]
+  }
+}
+
+write.csv(result_df, bounds_file_path, row.names = F, quote = F)
+
+irr_exchange_bounds = readLines(bounds_file_path)
+irr_exchange_bounds[1] = paste0("base_upper_bounds,", C)
+writeLines(irr_exchange_bounds, bounds_file_path)
 
 Bacteria_Parameters <- read.csv(paste0(wd, "/input/Bacteria_Parameters.csv"), head = F)
 Bacteria_Parameters[1] <- 0.21 # starv
@@ -130,7 +175,6 @@ write.table(Bacteria_Parameters,
             sep = ",", row.names = FALSE, col.names = FALSE, quote = F)
 
 # Adjust General_functions.cpp
-
 delta = 1e+10 # density
 
 # Read the C++ file
@@ -162,16 +206,24 @@ R_funct_content <- readLines(R_funct_file_path)
 # Insert the new variables after the includes
 R_funct_content <- c(
   R_funct_content[1:6],
-  paste0("  y_ini <- c(", bacteria_counts, ", ", biomass*1e+12, ")"),
+  paste0("  y_ini <- c(", bacteria_counts, ", ", biomass, ")"),
   R_funct_content[8:length(R_funct_content)]
 )
 
 # Write the modified content back to the file
 writeLines(R_funct_content, R_funct_file_path)
 
+start_time <- Sys.time()
+
 model.generation(net_fname = paste0(wd, "/net/", model_name, ".PNPRO"),
                  transitions_fname = paste0(wd, "/input/General_functions.cpp"),
                  fba_fname = paste0(wd, "/results/", mn_name, ".txt"))
+
+end_time <- Sys.time()
+
+elapsed_time <- end_time - start_time
+units(elapsed_time) <- "mins"
+cat("Time elapsed:", elapsed_time, "minutes\n")
 
 system(paste0("mv ", 
               model_name, ".def ", 
@@ -179,6 +231,8 @@ system(paste0("mv ",
               model_name, ".net ", 
               model_name, ".PlaceTransition ", 
               model_name, ".solver ", wd, "/net/"))
+
+start_time <- Sys.time()
 
 model.analysis(solver_fname = paste0(wd, "/net/", model_name, ".solver"),
                parameters_fname = paste0(wd, "/input/initData.csv"),
@@ -195,16 +249,24 @@ model.analysis(solver_fname = paste0(wd, "/net/", model_name, ".solver"),
                               paste0(wd, "/results_ex_reactions/EX_upper_bounds_FBA.csv"),
                               paste0(wd, "/results_ex_reactions/EX_upper_bounds_nonFBA.csv")))
 
+end_time <- Sys.time()
+
+elapsed_time <- end_time - start_time
+units(elapsed_time) <- "mins"
+cat("Time elapsed:", elapsed_time, "minutes\n")
+
 p = plot_analysis()
 
-ggsave(paste0(model_name, "_",  "Analysis_results.pdf"), p[[1]] + p[[2]] + (p[[3]] / p[[4]] / p[[5]]), width = 15, height = 8)
+ggsave(paste0(model_name, "_",  "Analysis_results.pdf"), 
+       p[[1]] + p[[2]] + (p[[3]] / p[[4]] / p[[5]]), 
+       width = 15, height = 8)
 
 Bacteria_Parameters <- read.csv(paste0(wd, "/input/Bacteria_Parameters.csv"), head = F)
 
 starv_int = c(0.15, 0.5)
 dup = Bacteria_Parameters[2]
 death = Bacteria_Parameters[3]
-  
+
 init_data <- read.csv(paste0(wd, "/input/initData.csv"), head = F)
 init_data[2, ] <- paste0("g; Bacteria_Parameters.csv; psensitivty; n = 1; min = ", 
                          starv_int[1], "; max = ", starv_int[2], 
@@ -239,9 +301,7 @@ plots[[1]] + plots[[2]]
 results <- analyze_flux_sensitivity(wd = wd,
                                     model_name = model_name,
                                     mn_name = mn_name,
-                                    reactions_of_interest = c("EX_biomass_e_f", "EX_biomass_e_r",
-                                                              "EX_glc_D_e_r", "EX_glc_D_e_f",
-                                                              "EX_lcts_e_r", "EX_lcts_e_f"))
+                                    reactions_of_interest = reaction_of_interest)
 
 # Access results
 # sensitivity_data <- results$sensitivity_data
