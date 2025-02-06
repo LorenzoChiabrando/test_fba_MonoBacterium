@@ -234,8 +234,8 @@ model.analysis(solver_fname = paste0(wd, "/net/", model_name, ".solver"),
                parameters_fname = paste0(wd, "/input/initData.csv"),
                functions_fname = paste0(wd, "/functions/functions.R"),
                debug = T,
-               f_time = 36,
-               s_time = 0.5,
+               f_time = 72,
+               s_time = 0.25,
                i_time = 0,
                rchn = 1e-06,
                event_function = NULL,
@@ -251,18 +251,17 @@ elapsed_time <- end_time - start_time
 units(elapsed_time) <- "mins"
 cat("Time elapsed:", elapsed_time, "minutes\n")
 
-p = plot_analysis(reactions_of_interest = 
-                    c("EX_biomass_e_f", "EX_biomass_e_r",
-                      "EX_glc_D_e_r", "EX_glc_D_e_f",
-                      "EX_lcts_e_r", "EX_lcts_e_f",
-                      "EX_but_e_r", "EX_but_e_f",
-                      "EX_ppa_e_r", "EX_ppa_e_f",
-                      "EX_ac_e_r", "EX_ac_e_f"), ncol_reactions = 3,
+p = plot_analysis(reactions_of_interest = c("EX_biomass_e_f", "EX_biomass_e_r",
+                                            "EX_glc_D_e_r", "EX_glc_D_e_f",
+                                            "EX_lcts_e_r", "EX_lcts_e_f",
+                                            "EX_but_e_r", "EX_but_e_f",
+                                            "EX_ppa_e_r", "EX_ppa_e_f",
+                                            "EX_ac_e_r", "EX_ac_e_f"), ncol_reactions = 3,
                   place2plot = c(abbr, paste0(abbr, "_biomass_e")), ncol_places = 1)
 
 ggsave(paste0(model_name, "_",  "Analysis_results.pdf"), 
        p[[1]] + p[[2]] + (p[[3]] / p[[4]] / p[[5]]), 
-       width = 21, height = 9)
+       width = 22, height = 9)
 
 file.remove(list.files(path = wd, pattern = "\\.log$", full.names = TRUE))
 file.remove(list.files(path = wd, pattern = "\\ID$", full.names = TRUE))
@@ -283,12 +282,14 @@ write.table(init_data,
             paste0(wd, "/input/initDataSensitivity.csv"),
             sep = ",", row.names = FALSE, col.names = FALSE, quote = F)
 
+start_time <- Sys.time()
+
 model.sensitivity(solver_fname = paste0(wd, "/net/", model_name, ".solver"),
                   fba_fname = paste0(wd, "/results/", mn_name, ".txt"),
                   i_time = 0, 
                   f_time = 72, 
-                  s_time = 0.5,
-                  n_config = 250, 
+                  s_time = 0.25,
+                  n_config = parallel::detectCores()*2,
                   debug = T,
                   rchn = 1e-06,
                   event_function = NULL,
@@ -300,28 +301,48 @@ model.sensitivity(solver_fname = paste0(wd, "/net/", model_name, ".solver"),
                                  paste0(wd, "/results_ex_reactions/EX_upper_bounds_FBA.csv"),
                                  paste0(wd, "/results_ex_reactions/EX_upper_bounds_nonFBA.csv")))
 
+end_time <- Sys.time()
+
+elapsed_time <- end_time - start_time
+units(elapsed_time) <- "mins"
+cat("Time elapsed:", elapsed_time, "minutes\n")
+
 # results <- process_sensitivity_analysis(wd = wd, save_type = "both")
 # Save only trace files
 trace_results <- process_sensitivity_analysis(wd = wd, save_type = "trace")
 
 # Get the plots
-plots <- analyze_trace_sensitivity(wd = wd, model_name = model_name)
+plots_places <- analyze_trace_sensitivity(wd = wd, model_name = model_name)
 
-# Combine plots manually as needed
-plots[[1]] + plots[[2]]
+ggsave(paste0(model_name, "_",  "Sensitivity_places.pdf"), 
+       plots_places[[1]] + plots_places[[2]], 
+       width = 8, height = 3)
 
 # Run the analysis
-results <- analyze_flux_sensitivity(wd = wd,
-                                    model_name = model_name,
-                                    mn_name = mn_name,
-                                    reactions_of_interest = reaction_of_interest)
+results <- analyze_flux_sensitivity(
+  wd = wd,
+  model_name = model_name,
+  mn_name = mn_name,
+  reactions_of_interest = c("EX_biomass_e_f", "EX_biomass_e_r",
+                            "EX_glc_D_e_r", "EX_glc_D_e_f",
+                            "EX_lcts_e_r", "EX_lcts_e_f",
+                            "EX_but_e_r", "EX_but_e_f",
+                            "EX_ppa_e_r", "EX_ppa_e_f",
+                            "EX_ac_e_r", "EX_ac_e_f"))
 
 # Access results
 # sensitivity_data <- results$sensitivity_data
 # combined_data <- results$combined_data
 plots <- results$plots
 
-(plots[[1]] + plots[[2]]) / (plots[[3]] + plots[[4]]) / (plots[[5]] + plots[[6]]) 
+ggsave(paste0(model_name, "_",  "Sensitivity_fluxes.pdf"), 
+       ((plots[[1]] | plots[[2]]) /
+          (plots[[3]] | plots[[4]]) /
+          (plots[[5]] | plots[[6]])) |
+         ((plots[[7]] | plots[[8]]) /
+            (plots[[9]] | plots[[10]]) /
+            (plots[[11]] | plots[[12]])),
+       width = 12, height = 7)
 
 file.remove(list.files(path = wd, pattern = "\\.log$", full.names = TRUE))
 file.remove(list.files(path = wd, pattern = "\\ID$", full.names = TRUE))

@@ -122,9 +122,11 @@ double Starvation(double *Value,
     }
 
     double currentBiomass = Value[biomassIndex->second];
-    //double minBiomass = vec_fluxb[bacterium].getBioMin();
+    double BioMin = vec_fluxb[bacterium].getBioMin();
     double num_places_specie = floor(Value[placeIndex->second]);
-    double rate = (num_places_specie >= 1) ? starvation_rate * (currentBiomass * 1) : 0;
+    
+    double effectiveBiomass = (currentBiomass > BioMin) ? (currentBiomass - BioMin) : 0.0;
+    double rate = starvation_rate * effectiveBiomass;
     
     cout << "Starvation rate for: " << bacteriumName << " is --->  " << rate << " (pgDW/h) "<< "time ---> " << time << endl;
     // Uncomment the following line when debugging is needed

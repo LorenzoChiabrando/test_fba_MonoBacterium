@@ -201,7 +201,6 @@ plot_analysis <- function(wd = getwd(),
   col_dup = custom_colors[4]
   col_death = custom_colors[5]
   
-  # Input validation (same as before)
   if ( is.null(trace_file) || is.null(flux_file) ) {
     trace_files <- list.files(path = file.path(wd, "BacPN_analysis"), 
                               pattern = "\\.trace$", 
@@ -218,7 +217,6 @@ plot_analysis <- function(wd = getwd(),
     flux_file <- flux_files[1]
   }
   
-  # Extract organism name
   organism_name <- extract_organism_name(basename(flux_file))
   
   if (is.null(organism_name)) {
@@ -226,10 +224,8 @@ plot_analysis <- function(wd = getwd(),
     organism_name <- "Unknown_organism"
   }
   
-  # Process starvation rate data
   all_data <- process_log_file(filename)
   
-  # Enhanced starvation rate plot
   p_starv <- ggplot(all_data[["starvation"]], 
                     aes(x = as.double(Time), y = StarvationRate, color = File)) +
     geom_line(linewidth = 0.5) +
@@ -268,6 +264,20 @@ plot_analysis <- function(wd = getwd(),
     tidyr::gather(key = "Places", value = "Marking", -Time) %>%
     # Convert Places to factor to maintain order
     mutate(Places = factor(Places, levels = unique(Places)))
+  
+  # First, let's identify the time points where E_coli marking is less than 1
+  critical_times <- trace %>%
+    filter(Places == "E_coli" & Marking < 1) %>%
+    pull(Time)
+  
+  # Process and enhance flux plot
+  flux <- utils::read.table(flux_file, header = TRUE) %>%
+    tidyr::gather(key = "Reaction", value = "Flux", -Time) %>%
+    mutate(Organism = organism_name)
+  
+  # Now modify the flux dataframe by setting Flux to 0 at those time points
+  flux <- flux %>%
+    mutate(Flux = if_else(Time %in% critical_times, 0, Flux))
   
   # Create a professional theme
   professional_theme <- function(base_size = 12) {
@@ -323,11 +333,6 @@ plot_analysis <- function(wd = getwd(),
     # Add subtle background shading for visual interest
     geom_ribbon(aes(ymin = min(Marking), ymax = Marking), 
                 alpha = 0.1, fill = "#908432")
-  
-  # Process and enhance flux plot
-  flux <- utils::read.table(flux_file, header = TRUE) %>%
-    tidyr::gather(key = "Reaction", value = "Flux", -Time) %>%
-    mutate(Organism = organism_name)
   
   # Process the data as before
   flux_filtered <- flux %>%
